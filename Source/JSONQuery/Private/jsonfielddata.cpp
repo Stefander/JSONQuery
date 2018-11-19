@@ -1,4 +1,21 @@
-// Copyright 1998-2013 Epic Games, Inc. All Rights Reserved.
+/*	JSON Query Plugin
+	Copyright(C) 2015-2018 Stefan 'Stefander' Wijnker
+	Special thanks: RVillani, Quantum & johnbo (Unreal forums)
+
+	This program is free software : you can redistribute it and/or modify
+	it under the terms of the GNU General Public License as published by
+	the Free Software Foundation, either version 3 of the License, or
+	(at your option) any later version.
+
+	This program is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.See the
+	GNU General Public License for more details.
+
+	You should have received a copy of the GNU General Public License
+	along with this program.If not, see <http://www.gnu.org/licenses/>.
+*/
+
 #include "JsonFieldData.h"
 
 //#include "Map.h"
@@ -10,159 +27,46 @@
 /**
 * Constructor
 */
-UJsonFieldData::UJsonFieldData()
-{
+UJsonFieldData::UJsonFieldData() {
 	Reset();
 }
 
-UJsonFieldData* UJsonFieldData::GetRequest(const FString &url)
-{
+UJsonFieldData* UJsonFieldData::Create() {
+	// Construct the object and return it
+	return NewObject<UJsonFieldData>();
+}
+
+bool UJsonFieldData::HasField(const FString& key) {
+	return Data->HasField(key);
+}
+
+TArray<FString> UJsonFieldData::GetObjectKeys() {
+	TArray<FString> stringArray;
+	for (TMap<FString, TSharedPtr<FJsonValue>>::TConstIterator currJsonValue = Data->Values.CreateConstIterator(); currJsonValue; ++currJsonValue) {
+		stringArray.Add((*currJsonValue).Key);
+	}
+
+	return stringArray;
+}
+
+UJsonFieldData* UJsonFieldData::GetRequest(const FString &url) {
 	// Create new page data for the response
 	UJsonFieldData* dataObj = Create();
 
 	// Create the HTTP request
-	TSharedRef< IHttpRequest > HttpRequest = FHttpModule::Get().CreateRequest();
+	TSharedRef<IHttpRequest> HttpRequest = FHttpModule::Get().CreateRequest();
 	HttpRequest->SetVerb("GET");
 	HttpRequest->SetURL(CreateURL(url));
 	HttpRequest->OnProcessRequestComplete().BindUObject(dataObj, &UJsonFieldData::OnReady);
-	
+
 	dataObj->AddToRoot();
 
-	// Execute the request
 	HttpRequest->ProcessRequest();
 
-	// Return the page data
 	return dataObj;
 }
 
-UJsonFieldData* UJsonFieldData::Create()
-{
-	// Construct the object and return it
-	UJsonFieldData* fieldData = NewObject<UJsonFieldData>();
-	return fieldData;
-}
-
-UJsonFieldData* UJsonFieldData::FromFile(const FString FilePath, EFolder RelativeTo)
-{
-	FString Result;
-	FString StartPath;
-	switch (RelativeTo)
-	{
-	case EFolder::Content: StartPath = FPaths::ProjectContentDir(); break;
-	case EFolder::Project:
-	default: StartPath = FPaths::ProjectDir(); break;
-	}
-	FString FullJsonPath = FPaths::ConvertRelativePathToFull(StartPath / FilePath);
-	if (!FFileHelper::LoadFileToString(Result, *FullJsonPath))
-	{
-		UE_LOG(JSONQueryLog, Error, TEXT("Can't load json data from %s"), *FullJsonPath);
-		return nullptr;
-	}
-	UJsonFieldData* JSON(Create());
-	JSON->FromString(Result);
-	return JSON;
-}
-
-FString UJsonFieldData::CreateURL(FString inputURL)
-{
-	if (!inputURL.StartsWith("http"))
-	{
-		return "http://" + inputURL;
-	}
-
-	return inputURL;
-}
-
-void UJsonFieldData::WriteObject(TSharedRef<TJsonWriter<TCHAR>> writer, FString key, FJsonValue* value)
-{
-	if (value->Type == EJson::Null)
-	{
-		// Write simple entry, don't a key when it isn't set
-		if (key.Len() > 0)
-		{
-			writer->WriteNull(key);
-		}
-		else
-		{
-			writer->WriteNull();
-		}
-	}
-	if (value->Type == EJson::String)
-	{
-		// Write simple string entry, don't a key when it isn't set
-		if (key.Len() > 0)
-		{
-			writer->WriteValue(key, value->AsString());
-		}
-		else
-		{
-			writer->WriteValue(value->AsString());
-		}
-	}
-	if (value->Type == EJson::Boolean)
-	{
-		// Write simple entry, don't a key when it isn't set
-		if (key.Len() > 0)
-		{
-			writer->WriteValue(key, value->AsBool());
-		}
-		else
-		{
-			writer->WriteValue(value->AsBool());
-		}
-	}
-	if (value->Type == EJson::Number)
-	{
-		// Write simple entry, don't a key when it isn't set
-		if (key.Len() > 0)
-		{
-			writer->WriteValue(key, value->AsNumber());
-		}
-		else
-		{
-			writer->WriteValue(value->AsNumber());
-		}
-	}
-	else if (value->Type == EJson::Object)
-	{
-		// Write object entry
-		if (key.Len() > 0)
-		{
-			writer->WriteObjectStart(key);
-		}
-		else
-		{
-			writer->WriteObjectStart();
-		}
-
-		// Loop through all the values in the object data
-		TSharedPtr<FJsonObject> objectData = value->AsObject();
-		for (auto objectValue = objectData->Values.CreateIterator(); objectValue; ++objectValue)
-		{
-			// Using recursion to write the key and value to the writer
-			WriteObject(writer, objectValue.Key(), objectValue.Value().Get());
-		}
-
-		writer->WriteObjectEnd();
-	}
-	else if (value->Type == EJson::Array)
-	{
-		// Process array entry
-		writer->WriteArrayStart(key);
-			
-		TArray<TSharedPtr<FJsonValue>> objectArray = value->AsArray();
-		for (int32 i = 0; i < objectArray.Num(); i++)
-		{
-			// Use recursion with an empty key to process all the values in the array
-			WriteObject(writer, "", objectArray[i].Get());
-		}
-
-		writer->WriteArrayEnd();
-	}
-}
-
-void UJsonFieldData::PostRequest(const FString &url)
-{
+void UJsonFieldData::PostRequest(const FString &url) {
 	FString outStr = ToString();
 
 	// Log the post data for the user (OPTIONAL)
@@ -182,12 +86,47 @@ void UJsonFieldData::PostRequest(const FString &url)
 	HttpRequest->ProcessRequest();
 }
 
-void UJsonFieldData::PostRequestWithFile(FString FilePath, const FString &Url)
-{
+bool UJsonFieldData::FromString(const FString& dataString) {
+	TSharedRef<TJsonReader<TCHAR>> JsonReader = TJsonReaderFactory<TCHAR>::Create(dataString);
+
+	// Deserialize the JSON data
+	bool isDeserialized = FJsonSerializer::Deserialize(JsonReader, Data);
+
+	if (!isDeserialized || !Data.IsValid()) {
+		UE_LOG(JSONQueryLog, Error, TEXT("JSON data is invalid! Input:\n'%s'!"), *dataString);
+		return false;
+	}
+
+	return true;
+}
+
+FString UJsonFieldData::ToString() {
+	FString outStr;
+	TSharedRef<TJsonWriter<TCHAR>> JsonWriter = TJsonWriterFactory<TCHAR>::Create(&outStr);
+
+	// Start writing the response
+	WriteObject(JsonWriter, "", new FJsonValueObject(Data));
+	JsonWriter->Close();
+
+	return outStr;
+}
+
+//** FROM/POST FILE **//
+
+bool UJsonFieldData::FromFile(const FString& FilePath) {
+	FString Result;
+	FString FullJsonPath = FPaths::ConvertRelativePathToFull(FPaths::ProjectContentDir() / FilePath);
+	if (!FFileHelper::LoadFileToString(Result, *FullJsonPath)) {
+		UE_LOG(JSONQueryLog, Error, TEXT("Can't load JSON data from '%s'!"), *FilePath);
+	}
+
+	return FromString(Result);
+}
+
+void UJsonFieldData::PostRequestWithFile(FString FilePath, const FString &Url) {
 	FPaths::NormalizeFilename(FilePath);
 	TArray<uint8> RawFileData;
-	if (!FFileHelper::LoadFileToArray(RawFileData, *FilePath))
-	{
+	if (!FFileHelper::LoadFileToArray(RawFileData, *FilePath)) {
 		OnGetResult.Broadcast(false, this, EJSONResult::JSONParsingFailed);
 		return;
 	}
@@ -236,47 +175,45 @@ void UJsonFieldData::PostRequestWithFile(FString FilePath, const FString &Url)
 	HttpRequest->ProcessRequest();
 }
 
-UJsonFieldData* UJsonFieldData::SetString(const FString& key, const FString& value)
-{
-	Data->SetStringField(*key,*value);
-	return this;
+//** GETTER/SETTERS **//
+
+UJsonFieldData* UJsonFieldData::GetObject(const FString& key, bool& success) {
+	UJsonFieldData* fieldObj = NULL;
+	const TSharedPtr<FJsonObject> *outPtr;
+	if (!Data->TryGetObjectField(*key, outPtr)) {
+		UE_LOG(JSONQueryLog, Error, TEXT("Entry '%s' not found in the field data!"), *key);
+		success = false;
+		return NULL;
+	}
+
+	fieldObj = UJsonFieldData::Create();
+	fieldObj->Data = *outPtr;
+	success = true;
+	return fieldObj;
 }
 
-UJsonFieldData* UJsonFieldData::SetBoolean(const FString& key, const bool value)
-{
-	Data->SetBoolField(*key, value);
-	return this;
-}
-
-UJsonFieldData* UJsonFieldData::SetFloat(const FString& key, const float value)
-{
-	Data->SetNumberField(*key, static_cast<double>(value));
-	return this;
-}
-
-UJsonFieldData* UJsonFieldData::SetInt(const FString& key, const int32 value)
-{
-	Data->SetNumberField(*key, static_cast<double>(value));
-	return this;
-}
-
-UJsonFieldData* UJsonFieldData::SetNull(const FString& key)
-{
-	Data->SetObjectField(*key, NULL);
-	return this;
-}
-
-UJsonFieldData* UJsonFieldData::SetObject(const FString& key, const UJsonFieldData* objectData)
-{
+UJsonFieldData* UJsonFieldData::SetObject(const FString& key, const UJsonFieldData* objectData) {
 	Data->SetObjectField(*key, objectData->Data);
 	return this;
 }
 
-UJsonFieldData* UJsonFieldData::SetObjectArray(const FString& key, const TArray<UJsonFieldData*> objectData)
-{
-	TArray<TSharedPtr<FJsonValue>> *dataArray = new TArray<TSharedPtr<FJsonValue>>();
+TArray<UJsonFieldData*> UJsonFieldData::GetObjectArray(const FString& key, bool& success) {
+	TArray<UJsonFieldData*> objectArray;
+	const TArray<TSharedPtr<FJsonValue>>* valueArray;
+	success = Data->TryGetArrayField(*key, valueArray);
+	if (success) {
+		for (int32 i = 0; i < valueArray->Num(); i++) {
+			UJsonFieldData* pageData = Create();
+			pageData->Data = (*valueArray)[i]->AsObject();
+			objectArray.Add(pageData);
+		}
+	}
 
-	// Loop through the array and create new shared FJsonValueObject instances for every FJsonObject
+	return objectArray;
+}
+
+UJsonFieldData* UJsonFieldData::SetObjectArray(const FString& key, const TArray<UJsonFieldData*> objectData) {
+	TArray<TSharedPtr<FJsonValue>> *dataArray = new TArray<TSharedPtr<FJsonValue>>();
 	for (int32 i = 0; i < objectData.Num(); i++) {
 		dataArray->Add(MakeShareable(new FJsonValueObject(objectData[i]->Data)));
 	}
@@ -285,13 +222,39 @@ UJsonFieldData* UJsonFieldData::SetObjectArray(const FString& key, const TArray<
 	return this;
 }
 
-UJsonFieldData* UJsonFieldData::SetStringArray(const FString& key, const TArray<FString> stringData)
-{
-	TArray<TSharedPtr<FJsonValue>> *dataArray = new TArray<TSharedPtr<FJsonValue>>();
+//** FSTRING **//
+FString UJsonFieldData::GetString(const FString& key, bool& success) const {
+	FString outString = "";
+	success = Data->TryGetStringField(*key, outString);
+	if (!success) {
+		UE_LOG(JSONQueryLog, Error, TEXT("String entry '%s' not found in the field data!"), *key);
+	}
 
-	// Loop through the input array and add new shareable FJsonValueString instances to the data array
-	for (int32 i=0; i < stringData.Num(); i++)
-	{
+	return outString;
+}
+
+UJsonFieldData* UJsonFieldData::SetString(const FString& key, const FString& value) {
+	Data->SetStringField(*key, *value);
+	return this;
+}
+
+TArray<FString> UJsonFieldData::GetStringArray(const FString& key, bool& success) {
+	TArray<FString> stringArray;
+	const TArray<TSharedPtr<FJsonValue>>* valueArray;
+	success = Data->TryGetArrayField(key, valueArray);
+	if (success) {
+		for (int32 i = 0; i < valueArray->Num(); i++) {
+			UJsonFieldData* pageData = Create();
+			stringArray.Add((*valueArray)[i]->AsString());
+		}
+	}
+
+	return stringArray;
+}
+
+UJsonFieldData* UJsonFieldData::SetStringArray(const FString& key, const TArray<FString> stringData) {
+	TArray<TSharedPtr<FJsonValue>> *dataArray = new TArray<TSharedPtr<FJsonValue>>();
+	for (int32 i = 0; i < stringData.Num(); i++) {
 		dataArray->Add(MakeShareable(new FJsonValueString(stringData[i])));
 	}
 
@@ -299,13 +262,39 @@ UJsonFieldData* UJsonFieldData::SetStringArray(const FString& key, const TArray<
 	return this;
 }
 
-UJsonFieldData* UJsonFieldData::SetBoolArray(const FString& key, const TArray<bool> data)
-{
-	TArray<TSharedPtr<FJsonValue>> *dataArray = new TArray<TSharedPtr<FJsonValue>>();
+//** BOOL **//
+bool UJsonFieldData::GetBool(const FString& key, bool& success) const {
+	bool value = false;
+	success = Data->TryGetBoolField(*key, value);
+	if (!success) {
+		UE_LOG(JSONQueryLog, Error, TEXT("Boolean entry '%s' not found in the field data!"), *key);
+	}
 
-	// Loop through the input array and add new shareable FJsonValueString instances to the data array
-	for (int32 i = 0; i < data.Num(); i++)
-	{
+	return value;
+}
+
+UJsonFieldData* UJsonFieldData::SetBoolean(const FString& key, const bool value) {
+	Data->SetBoolField(*key, value);
+	return this;
+}
+
+TArray<bool> UJsonFieldData::GetBoolArray(const FString& key, bool& success) {
+	TArray<bool> boolArray;
+	const TArray<TSharedPtr<FJsonValue>>* valueArray;
+	success = Data->TryGetArrayField(*key, valueArray);
+	if (success) {
+		for (int32 i = 0; i < valueArray->Num(); i++) {
+			UJsonFieldData* pageData = Create();
+			boolArray.Add((*valueArray)[i]->AsBool());
+		}
+	}
+
+	return boolArray;
+}
+
+UJsonFieldData* UJsonFieldData::SetBoolArray(const FString& key, const TArray<bool> data) {
+	TArray<TSharedPtr<FJsonValue>> *dataArray = new TArray<TSharedPtr<FJsonValue>>();
+	for (int32 i = 0; i < data.Num(); i++) {
 		dataArray->Add(MakeShareable(new FJsonValueBoolean(data[i])));
 	}
 
@@ -313,13 +302,39 @@ UJsonFieldData* UJsonFieldData::SetBoolArray(const FString& key, const TArray<bo
 	return this;
 }
 
-UJsonFieldData* UJsonFieldData::SetFloatArray(const FString& key, const TArray<float> data)
-{
-	TArray<TSharedPtr<FJsonValue>> *dataArray = new TArray<TSharedPtr<FJsonValue>>();
+//** FLOAT **//
+float UJsonFieldData::GetFloat(const FString& key, bool& success) const {
+	double value = 0.0f;
+	success = Data->TryGetNumberField(*key, value);
+	if (!success) {
+		UE_LOG(JSONQueryLog, Error, TEXT("Number entry '%s' not found in the field data!"), *key);
+	}
 
-	// Loop through the input array and add new shareable FJsonValueString instances to the data array
-	for (int32 i = 0; i < data.Num(); i++)
-	{
+	return static_cast<float>(value);
+}
+
+UJsonFieldData* UJsonFieldData::SetFloat(const FString& key, const float value) {
+	Data->SetNumberField(*key, static_cast<double>(value));
+	return this;
+}
+
+TArray<float> UJsonFieldData::GetFloatArray(const FString& key, bool& success) {
+	TArray<float> floatArray;
+	const TArray<TSharedPtr<FJsonValue>>* valueArray;
+	success = Data->TryGetArrayField(*key, valueArray);
+	if (success) {
+		for (int32 i = 0; i < valueArray->Num(); i++) {
+			UJsonFieldData* pageData = Create();
+			floatArray.Add(static_cast<float>((*valueArray)[i]->AsNumber()));
+		}
+	}
+
+	return floatArray;
+}
+
+UJsonFieldData* UJsonFieldData::SetFloatArray(const FString& key, const TArray<float> data) {
+	TArray<TSharedPtr<FJsonValue>> *dataArray = new TArray<TSharedPtr<FJsonValue>>();
+	for (int32 i = 0; i < data.Num(); i++) {
 		dataArray->Add(MakeShareable(new FJsonValueNumber(static_cast<double>(data[i]))));
 	}
 
@@ -327,13 +342,39 @@ UJsonFieldData* UJsonFieldData::SetFloatArray(const FString& key, const TArray<f
 	return this;
 }
 
-UJsonFieldData* UJsonFieldData::SetIntArray(const FString& key, const TArray<int32> data)
-{
-	TArray<TSharedPtr<FJsonValue>> *dataArray = new TArray<TSharedPtr<FJsonValue>>();
+//** INT32 **//
+int32 UJsonFieldData::GetInt(const FString& key, bool& success) const {
+	int32 value = 0;
+	success = Data->TryGetNumberField(*key, value);
+	if (!success) {
+		UE_LOG(JSONQueryLog, Error, TEXT("Number entry '%s' not found in the field data!"), *key);
+	}
 
-	// Loop through the input array and add new shareable FJsonValueString instances to the data array
-	for (int32 i = 0; i < data.Num(); i++)
-	{
+	return value;
+}
+
+UJsonFieldData* UJsonFieldData::SetInt(const FString& key, const int32 value) {
+	Data->SetNumberField(*key, static_cast<double>(value));
+	return this;
+}
+
+TArray<int32> UJsonFieldData::GetIntArray(const FString& key, bool& success) {
+	TArray<int32> intArray;
+	const TArray<TSharedPtr<FJsonValue>>* valueArray;
+	success = Data->TryGetArrayField(*key, valueArray);
+	if (success) {
+		for (int32 i = 0; i < valueArray->Num(); i++) {
+			UJsonFieldData* pageData = Create();
+			intArray.Add(static_cast<int32>((*valueArray)[i]->AsNumber()));
+		}
+	}
+
+	return intArray;
+}
+
+UJsonFieldData* UJsonFieldData::SetIntArray(const FString& key, const TArray<int32> data) {
+	TArray<TSharedPtr<FJsonValue>> *dataArray = new TArray<TSharedPtr<FJsonValue>>();
+	for (int32 i = 0; i < data.Num(); i++) {
 		dataArray->Add(MakeShareable(new FJsonValueNumber(static_cast<double>(data[i]))));
 	}
 
@@ -341,13 +382,25 @@ UJsonFieldData* UJsonFieldData::SetIntArray(const FString& key, const TArray<int
 	return this;
 }
 
-UJsonFieldData* UJsonFieldData::SetNullArray(const FString& key, const int32& length)
-{
-	TArray<TSharedPtr<FJsonValue>> *dataArray = new TArray<TSharedPtr<FJsonValue>>();
+//** NULL **//
+UJsonFieldData* UJsonFieldData::SetNull(const FString& key) {
+	Data->SetObjectField(*key, NULL);
+	return this;
+}
 
-	// Loop through the input array and add new shareable FJsonValueString instances to the data array
-	for (int32 i = 0; i < length; i++)
-	{
+bool UJsonFieldData::GetIsNull(const FString& key, bool& success) const {
+	// If the current post data isn't valid, return an empty string
+	success = Data->HasField(key);
+	if (!success) {
+		UE_LOG(JSONQueryLog, Error, TEXT("Number entry '%s' not found in the field data!"), *key);
+	}
+
+	return Data->HasTypedField<EJson::Null>(key);
+}
+
+UJsonFieldData* UJsonFieldData::SetNullArray(const FString& key, const int32& length) {
+	TArray<TSharedPtr<FJsonValue>> *dataArray = new TArray<TSharedPtr<FJsonValue>>();
+	for (int32 i = 0; i < length; i++) {
 		dataArray->Add(MakeShareable(new FJsonValueNull()));
 	}
 
@@ -355,257 +408,10 @@ UJsonFieldData* UJsonFieldData::SetNullArray(const FString& key, const int32& le
 	return this;
 }
 
-UJsonFieldData* UJsonFieldData::GetObject(const FString& key, bool& success)
-{
-	UJsonFieldData* fieldObj = NULL;
-
-	// Try to get the object field from the data
-	const TSharedPtr<FJsonObject> *outPtr;
-	if (!Data->TryGetObjectField(*key, outPtr))
-	{
-		// Throw an error and return NULL when the key could not be found
-		UE_LOG(JSONQueryLog, Error, TEXT("Entry '%s' not found in the field data!"), *key);
-		success = false;
-		return NULL;
-	}
-
-	// Create a new field data object and assign the data
-	fieldObj = UJsonFieldData::Create();
-	fieldObj->Data = *outPtr;
-
-	// Return the newly created object
-	success = true;
-	return fieldObj;
-}
-
-TArray<FString> UJsonFieldData::GetStringArray(const FString& key, bool& success)
-{
-	TArray<FString> stringArray;
-
-	// Try to get the array field from the post data
-	const TArray<TSharedPtr<FJsonValue>> *arrayPtr;
-	if (Data->TryGetArrayField(*key, arrayPtr))
-	{
-		// Iterate through the array and use the string value from all the entries
-		for (int32 i=0; i < arrayPtr->Num(); i++)
-		{
-			stringArray.Add((*arrayPtr)[i]->AsString());
-		}
-		success = true;
-	}
-	else
-	{
-		// Throw an error when the entry could not be found in the field data
-		UE_LOG(JSONQueryLog, Error, TEXT("Array entry '%s' not found in the field data!"), *key);
-		success = false;
-	}
-
-	// Return the array, if unsuccessful the array will be empty
-	return stringArray;
-}
-
-TArray<bool> UJsonFieldData::GetBoolArray(const FString& key, bool& success)
-{
-	TArray<bool> array;
-
-	// Try to get the array field from the post data
-	const TArray<TSharedPtr<FJsonValue>> *arrayPtr;
-	if (Data->TryGetArrayField(*key, arrayPtr))
-	{
-		// Iterate through the array and use the bool value from all the entries
-		for (int32 i = 0; i < arrayPtr->Num(); i++)
-		{
-			array.Add((*arrayPtr)[i]->AsBool());
-		}
-		success = true;
-	}
-	else
-	{
-		// Throw an error when the entry could not be found in the field data
-		UE_LOG(JSONQueryLog, Error, TEXT("Array entry '%s' not found in the field data!"), *key);
-		success = false;
-	}
-
-	// Return the array, if unsuccessful the array will be empty
-	return array;
-}
-
-TArray<int32> UJsonFieldData::GetIntArray(const FString& key, bool& success)
-{
-	TArray<int32> array;
-
-	// Try to get the array field from the post data
-	const TArray<TSharedPtr<FJsonValue>> *arrayPtr;
-	if (Data->TryGetArrayField(*key, arrayPtr))
-	{
-		// Iterate through the array and use the bool value from all the entries
-		for (int32 i = 0; i < arrayPtr->Num(); i++)
-		{
-			array.Add(static_cast<int32>((*arrayPtr)[i]->AsNumber()));
-		}
-		success = true;
-	}
-	else
-	{
-		// Throw an error when the entry could not be found in the field data
-		UE_LOG(JSONQueryLog, Error, TEXT("Array entry '%s' not found in the field data!"), *key);
-		success = false;
-	}
-
-	// Return the array, if unsuccessful the array will be empty
-	return array;
-}
-
-TArray<float> UJsonFieldData::GetFloatArray(const FString& key, bool& success)
-{
-	TArray<float> array;
-
-	// Try to get the array field from the post data
-	const TArray<TSharedPtr<FJsonValue>> *arrayPtr;
-	if (Data->TryGetArrayField(*key, arrayPtr))
-	{
-		// Iterate through the array and use the bool value from all the entries
-		for (int32 i = 0; i < arrayPtr->Num(); i++)
-		{
-			array.Add(static_cast<float>((*arrayPtr)[i]->AsNumber()));
-		}
-		success = true;
-	}
-	else
-	{
-		// Throw an error when the entry could not be found in the field data
-		UE_LOG(JSONQueryLog, Error, TEXT("Array entry '%s' not found in the field data!"), *key);
-		success = false;
-	}
-
-	// Return the array, if unsuccessful the array will be empty
-	return array;
-}
-
-TArray<UJsonFieldData*> UJsonFieldData::GetObjectArray(const FString& key, bool& success)
-{
-	TArray<UJsonFieldData*> objectArray;
-
-	// Try to fetch and assign the array to the array pointer
-	const TArray<TSharedPtr<FJsonValue>> *arrayPtr;
-	if (Data->TryGetArrayField(*key, arrayPtr))
-	{
-		// Iterate through the input array and create new post data objects for every entry and add them to the objectArray
-		for (int32 i = 0; i < arrayPtr->Num(); i++)
-		{
-			UJsonFieldData* pageData = Create(); 
-			pageData->Data = (*arrayPtr)[i]->AsObject();
-			objectArray.Add(pageData);
-		}
-		success = true;
-	}
-	else
-	{
-		// Throw an error, since the value with the supplied key could not be found
-		UE_LOG(JSONQueryLog, Error, TEXT("Array entry '%s' not found in the field data!"), *key);
-		success = false;
-	}
-
-	// Return the array, will be empty if unsuccessful
-	return objectArray;
-}
-
-TArray<FString> UJsonFieldData::GetObjectKeys()
-{
-	TArray<FString> stringArray;
-
-	for (auto currJsonValue = Data->Values.CreateConstIterator(); currJsonValue; ++currJsonValue)
-	{
-		stringArray.Add((*currJsonValue).Key);
-	}
-
-	// Return the array, will be empty if unsuccessful
-	return stringArray;
-}
-
-FString UJsonFieldData::GetString(const FString& key, bool& success) const
-{
-	FString outString;
-
-	// If the current post data isn't valid, return an empty string
-	if (!Data->TryGetStringField(*key, outString))
-	{
-		UE_LOG(JSONQueryLog, Error, TEXT("String entry '%s' not found in the field data!"), *key);
-		success = false;
-		return "";
-	}
-
-	success = true;
-	return outString;
-}
-
-bool UJsonFieldData::GetBool(const FString& key, bool& success) const
-{
-	bool value;
-
-	// If the current post data isn't valid, return an empty string
-	if (!Data->TryGetBoolField(*key, value))
-	{
-		UE_LOG(JSONQueryLog, Error, TEXT("Boolean entry '%s' not found in the field data!"), *key);
-		success = false;
-		return false;
-	}
-
-	success = true;
-	return value;
-}
-
-int32 UJsonFieldData::GetInt(const FString& key, bool& success) const
-{
-	int32 value;
-
-	// If the current post data isn't valid, return an empty string
-	if (!Data->TryGetNumberField(*key, value))
-	{
-		UE_LOG(JSONQueryLog, Error, TEXT("Number entry '%s' not found in the field data!"), *key);
-		success = false;
-		return 0;
-	}
-
-	success = true;
-	return value;
-}
-
-float UJsonFieldData::GetFloat(const FString& key, bool& success) const
-{
-	double value;
-
-	// If the current post data isn't valid, return an empty string
-	if (!Data->TryGetNumberField(*key, value))
-	{
-		UE_LOG(JSONQueryLog, Error, TEXT("Number entry '%s' not found in the field data!"), *key);
-		success = false;
-		return 0.0f;
-	}
-
-	success = true;
-	return static_cast<float>(value);
-}
-
-bool UJsonFieldData::GetIsNull(const FString& key, bool& success) const
-{
-	// If the current post data isn't valid, return an empty string
-	if (!Data->HasField(key))
-	{
-		UE_LOG(JSONQueryLog, Error, TEXT("Number entry '%s' not found in the field data!"), *key);
-		success = false;
-		return false;
-	}
-
-	success = true;
-	return Data->HasTypedField<EJson::Null>(key);
-}
-
-void UJsonFieldData::Reset()
-{
+//** PRIVATE **//
+void UJsonFieldData::Reset() {
 	// If the post data is valid
-	if (Data.IsValid())
-	{
+	if (Data.IsValid()) {
 		// Clear the current post data
 		Data.Reset();
 	}
@@ -614,27 +420,85 @@ void UJsonFieldData::Reset()
 	Data = MakeShareable(new FJsonObject());
 }
 
-bool UJsonFieldData::FromString(const FString& dataString)
-{
-	TSharedRef<TJsonReader<TCHAR>> JsonReader = TJsonReaderFactory<TCHAR>::Create(dataString);
-
-	// Deserialize the JSON data
-	bool isDeserialized = FJsonSerializer::Deserialize(JsonReader, Data);
-
-	if (!isDeserialized || !Data.IsValid())
-	{
-		UE_LOG(JSONQueryLog, Error, TEXT("JSON data is invalid! Input:\n'%s'"), *dataString);
-		return false;
+FString UJsonFieldData::CreateURL(FString inputURL) {
+	if (!inputURL.StartsWith("http")) {
+		return "http://" + inputURL;
 	}
 
-	return true;
+	return inputURL;
 }
 
-void UJsonFieldData::OnReady(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful)
-{
+void UJsonFieldData::WriteObject(TSharedRef<TJsonWriter<TCHAR>> writer, FString key, FJsonValue* value) {
+	bool hasKey = key.Len() > 0;
+	TSharedPtr<FJsonObject> objectData;
+	TArray<TSharedPtr<FJsonValue>> objectArray;
+
+	switch (value->Type) {
+	case EJson::Null:
+		if (hasKey) {
+			writer->WriteNull(key);
+		}
+		else {
+			writer->WriteNull();
+		}
+		break;
+	case EJson::String:
+		if (hasKey) {
+			writer->WriteValue(key, value->AsString());
+		}
+		else {
+			writer->WriteValue(value->AsString());
+		}
+		break;
+	case EJson::Boolean:
+		if (hasKey) {
+			writer->WriteValue(key, value->AsBool());
+		}
+		else {
+			writer->WriteValue(value->AsBool());
+		}
+		break;
+	case EJson::Number:
+		if (hasKey) {
+			writer->WriteValue(key, value->AsNumber());
+		}
+		else {
+			writer->WriteValue(value->AsNumber());
+		}
+		break;
+	case EJson::Object:
+		if (hasKey) {
+			writer->WriteObjectStart(key);
+		}
+		else {
+			writer->WriteObjectStart();
+		}
+
+		objectData = value->AsObject();
+		for (TMap<FString, TSharedPtr<FJsonValue>>::TIterator objectValue = objectData->Values.CreateIterator(); objectValue; ++objectValue) {
+			WriteObject(writer, objectValue.Key(), objectValue.Value().Get());
+		}
+
+		writer->WriteObjectEnd();
+		break;
+	case EJson::Array:
+		writer->WriteArrayStart(key);
+
+		objectArray = value->AsArray();
+		for (int32 i = 0; i < objectArray.Num(); i++) {
+			WriteObject(writer, "", objectArray[i].Get());
+		}
+
+		writer->WriteArrayEnd();
+		break;
+	default:
+		break;
+	}
+}
+
+void UJsonFieldData::OnReady(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful) {
 	RemoveFromRoot();
-	if (!bWasSuccessful)
-	{
+	if (!bWasSuccessful) {
 		UE_LOG(JSONQueryLog, Error, TEXT("Response was invalid! Please check the URL."));
 
 		// Broadcast the failed event
@@ -643,29 +507,10 @@ void UJsonFieldData::OnReady(FHttpRequestPtr Request, FHttpResponsePtr Response,
 	}
 
 	// Process the string
-	if (!FromString(Response->GetContentAsString()))
-	{
+	if (!FromString(Response->GetContentAsString())) {
 		OnGetResult.Broadcast(false, this, EJSONResult::JSONParsingFailed);
 	}
 
-	UE_LOG(JSONQueryLog, Error, TEXT("Got result: %s", *Response->GetContentAsString()));
 	// Broadcast the result event
 	OnGetResult.Broadcast(true, this, EJSONResult::Success);
-}
-
-FString UJsonFieldData::ToString()
-{
-	FString outStr;
-	TSharedRef<TJsonWriter<TCHAR>> JsonWriter = TJsonWriterFactory<TCHAR>::Create(&outStr);
-
-	// Start writing the response
-	WriteObject(JsonWriter, "", new FJsonValueObject(Data));
-	JsonWriter->Close();
-
-	return outStr;
-}
-
-bool UJsonFieldData::HasField(const FString& key)
-{
-	return Data->HasField(key);
 }
