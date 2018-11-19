@@ -172,7 +172,7 @@ void UJsonFieldData::PostRequestWithFile(FString FilePath, const FString &Url) {
 
 	AddToRoot();
 	// Execute the request
-	HttpRequest->ProcessRequest();
+	//HttpRequest->ProcessRequest();
 }
 
 //** GETTER/SETTERS **//
@@ -434,73 +434,72 @@ void UJsonFieldData::WriteObject(TSharedRef<TJsonWriter<TCHAR>> writer, FString 
 	TArray<TSharedPtr<FJsonValue>> objectArray;
 
 	switch (value->Type) {
-	case EJson::Null:
-		if (hasKey) {
-			writer->WriteNull(key);
-		}
-		else {
-			writer->WriteNull();
-		}
-		break;
-	case EJson::String:
-		if (hasKey) {
-			writer->WriteValue(key, value->AsString());
-		}
-		else {
-			writer->WriteValue(value->AsString());
-		}
-		break;
-	case EJson::Boolean:
-		if (hasKey) {
-			writer->WriteValue(key, value->AsBool());
-		}
-		else {
-			writer->WriteValue(value->AsBool());
-		}
-		break;
-	case EJson::Number:
-		if (hasKey) {
-			writer->WriteValue(key, value->AsNumber());
-		}
-		else {
-			writer->WriteValue(value->AsNumber());
-		}
-		break;
-	case EJson::Object:
-		if (hasKey) {
-			writer->WriteObjectStart(key);
-		}
-		else {
-			writer->WriteObjectStart();
-		}
+		case EJson::Object:
+			if (hasKey) {
+				writer->WriteObjectStart(key);
+			} else {
+				writer->WriteObjectStart();
+			}
 
-		objectData = value->AsObject();
-		for (TMap<FString, TSharedPtr<FJsonValue>>::TIterator objectValue = objectData->Values.CreateIterator(); objectValue; ++objectValue) {
-			WriteObject(writer, objectValue.Key(), objectValue.Value().Get());
-		}
+			objectData = value->AsObject();
+			for (TMap<FString, TSharedPtr<FJsonValue>>::TIterator objectValue = objectData->Values.CreateIterator(); objectValue; ++objectValue) {
+				WriteObject(writer, objectValue.Key(), objectValue.Value().Get());
+			}
 
-		writer->WriteObjectEnd();
-		break;
-	case EJson::Array:
-		writer->WriteArrayStart(key);
+			writer->WriteObjectEnd();
+			break;
+		case EJson::String:
+			if (hasKey) {
+				writer->WriteValue(key, value->AsString());
+			} else {
+				writer->WriteValue(value->AsString());
+			}
+			break;
+		case EJson::Boolean:
+			if (hasKey) {
+				writer->WriteValue(key, value->AsBool());
+			} else {
+				writer->WriteValue(value->AsBool());
+			}
+			break;
+		case EJson::Number:
+			if (hasKey) {
+				writer->WriteValue(key, value->AsNumber());
+			} else {
+				writer->WriteValue(value->AsNumber());
+			}
+			break;
+		case EJson::Array:
+			if (hasKey) {
+				writer->WriteArrayStart(key);
+			} else {
+				writer->WriteArrayStart();
+			}
 
-		objectArray = value->AsArray();
-		for (int32 i = 0; i < objectArray.Num(); i++) {
-			WriteObject(writer, "", objectArray[i].Get());
-		}
+			objectArray = value->AsArray();
+			for (int32 i = 0; i < objectArray.Num(); i++) {
+				WriteObject(writer, "", objectArray[i].Get());
+			}
 
-		writer->WriteArrayEnd();
-		break;
-	default:
-		break;
+			writer->WriteArrayEnd();
+			break;
+		case EJson::Null:
+			if (hasKey) {
+				writer->WriteNull(key);
+			} else {
+				writer->WriteNull();
+			}
+			break;
+		default:
+			break;
 	}
 }
 
 void UJsonFieldData::OnReady(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful) {
 	RemoveFromRoot();
 	if (!bWasSuccessful) {
-		UE_LOG(JSONQueryLog, Error, TEXT("Response was invalid! Please check the URL."));
-
+		UE_LOG(JSONQueryLog, Error, TEXT("Response was invalid! Please check the URL. Error: %i"), Response->GetResponseCode());
+		
 		// Broadcast the failed event
 		OnGetResult.Broadcast(false, this, EJSONResult::HttpFailed);
 		return;
