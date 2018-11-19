@@ -1,6 +1,6 @@
 /*	JSON Query Plugin
 	Copyright(C) 2015-2018 Stefan 'Stefander' Wijnker
-	Special thanks: RVillani, Quantum & johnbo (Unreal forums)
+	Special thanks: RVillani, Zakkar, Kheka, conneich, Patrik2991, Quantum & johnbo (Unreal forums)
 
 	This program is free software : you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
