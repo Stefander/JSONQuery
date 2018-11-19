@@ -9,4 +9,6 @@ Easy-to-use Blueprint system for posting and reading JSON data
 3) When prompted, rebuild the JSONQuery project
 4) Enjoy!
 # Special thanks:
-RVillani, Quantum & johnbo (Unreal forums)
+RVillani, Zakkar, Kheka, conneich, Patrik2991, Quantum & johnbo (Unreal forums)
+# Support:
+https://forums.unrealengine.com/community/released-projects/6382-json-query
