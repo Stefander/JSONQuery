@@ -4,7 +4,7 @@
 	"FriendlyName" : "JSON Query",
 	"Version" : 8,
   "VersionName": "1.0.5",
-  "EngineVersion": "4.21.0",
+  "EngineVersion": "4.24.0",
 	"CreatedBy" : "Stefander",
 	"CreatedByURL" : "http://stefander.nl/",
 	"Description" : "Exposes nodes to Blueprint that allow you to easily post and request pages on webservers through the JSON protocol.",
