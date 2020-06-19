@@ -39,7 +39,7 @@ enum class EJSONResult : uint8
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnGetResult, const bool, bSuccess, class UJsonFieldData*, JSON, const EJSONResult, Status);
 
 UCLASS(BlueprintType, Blueprintable, Category = "JSON")
-class UJsonFieldData : public UObject
+class JSONQUERY_API UJsonFieldData : public UObject
 {
 	GENERATED_BODY()
 
