@@ -508,6 +508,7 @@ void UJsonFieldData::OnReady(FHttpRequestPtr Request, FHttpResponsePtr Response,
 	// Process the string
 	if (!FromString(Response->GetContentAsString())) {
 		OnGetResult.Broadcast(false, this, EJSONResult::JSONParsingFailed);
+		return;
 	}
 
 	// Broadcast the result event
